@@ -17,6 +17,7 @@
 0. [Dependence Packages](#Dependence_Packages)
 0. [Development](#Development)
 0. [Contact](#Contact)
+0. [Gallery](#Gallery)
 
 ## Reference
     Chen, Y. and S. Fomel. "Random noise attenuation using local signal-and-noise orthogonalization." Geophysics 80, no. 6 (2015): WD1-WD9.
