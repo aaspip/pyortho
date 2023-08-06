@@ -97,11 +97,12 @@ def localorthoc(signal,noise,rect,niter=50,eps=0.0,verb=1):
 
 	signal2=signal2.reshape(n1,n2,n3,order='F')
 	noise2=noise2.reshape(n1,n2,n3,order='F')
+	low=low.reshape(n1,n2,n3,order='F')
 	
 	if n3==1:	#for 1D/2D problems
 		signal2=np.squeeze(signal2)
 		noise2=np.squeeze(noise2)
 		low=np.squeeze(low)
-		
+	
 	return signal2,noise2,low
 

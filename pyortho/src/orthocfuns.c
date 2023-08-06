@@ -72,29 +72,6 @@ int *ps_intalloc (size_t n /* number of elements */)
     return ptr;
 }
 
-bool *ps_boolalloc (size_t n /* number of elements */)
-/*< bool allocation >*/
-{
-    bool *ptr;
-    ptr = (bool*) ps_alloc (n,sizeof(bool));
-    return ptr;
-}
-
-bool **ps_boolalloc2 (size_t n1 /* fast dimension */, 
-				size_t n2 /* slow dimension */)
-/*< bool 2-D allocation, out[0] points to a contiguous array >*/
-{
-    size_t i2;
-    bool **ptr;
-    
-    ptr = (bool**) ps_alloc (n2,sizeof(bool*));
-    ptr[0] = ps_boolalloc (n1*n2);
-    for (i2=1; i2 < n2; i2++) {
-	ptr[i2] = ptr[0]+i2*n1;
-    }
-    return ptr;
-}
-
 /*from decart.c*/
 int ps_first_index (int i          /* dimension [0...dim-1] */, 
 		    int j        /* line coordinate */, 
@@ -826,868 +803,22 @@ void ps_divne (float* num, float* den,  float* rat, float eps)
     ps_conjgrad(NULL, ps_weight_lop,ps_trianglen_lop,p,rat,num,niter); 
 }
 
-
-
-/*from apfilt.c*/
-static int nf; /*size of filter, nf=nw*2*/
-static double *b;
-
-void apfilt_init(int nw /* filter order */)
-/*< initialize >*/
+void ps_divn_combine (const float* one, const float* two, float *prod)
+/*< compute product of two divisions >*/
 {
-    int j, k;
-    double bk;
+    int i;
+    float p;
 
-    nf = nw*2;
-    b = (double*) ps_alloc(nf+1,sizeof(double));
-
-    for (k=0; k <= nf; k++) {
-	bk = 1.0;
-	for (j=0; j < nf; j++) {
-	    if (j < nf-k) {
-		bk *= (k+j+1.0)/(2*(2*j+1)*(j+1));
-	    } else {
-		bk *= 1.0/(2*(2*j+1));
-	    }
-	}
-	b[k] = bk;
+    for (i=0; i < ndivn; i++) {
+	p = sqrtf(fabsf(one[i]*two[i]));
+	if ((one[i] > 0. && two[i] < 0. && -two[i] >= one[i]) ||
+	    (one[i] < 0. && two[i] > 0. && two[i] >= -one[i])) 
+	    p = -p;
+	p += 1.;
+	p *= p;
+	p *= p/16.;
+	prod[i] = p;	
     }
-}
-
-void apfilt_close(void)
-/*< free allocated storage >*/
-{
-    free(b);
-}
-
-void passfilter (float p  /* slope */, 
-		 float* a /* output filter [n+1] */)
-/*< find filter coefficients >*/
-{
-    int j, k;
-    double ak;
-    
-    for (k=0; k <= nf; k++) {
-	ak = b[k];
-	for (j=0; j < nf; j++) {
-	    if (j < nf-k) {
-		ak *= (nf-j-p);
-	    } else {
-		ak *= (p+j+1);
-	    }
-	}
-	a[k] = ak;
-    }
-}
-
-void aderfilter (float p  /* slope */, 
-		 float* a /* output filter [n+1] */)
-/*< find coefficients for filter derivative >*/
-{
-
-    int i, j, k;
-    double ak, ai;
-    
-    for (k=0; k <= nf; k++) {
-	ak = 0.;
-	for (i=0; i < nf; i++) {
-	    ai = -1.0;
-	    for (j=0; j < nf; j++) {
-		if (j != i) {			
-		    if (j < nf-k) {
-			ai *= (nf-j-p);
-		    } else {
-			ai *= (p+j+1);
-		    }
-		} else if (j < nf-k) {
-		    ai *= (-1);
-		}
-	    }
-	    ak += ai;
-	}
-	a[k] = ak*b[k];
-    }
-}
-
-
-/*from mask6.c*/
-void mask32 (bool both              /* left and right predictions */,
-	     int nw                 /* filter size */, 
-	     int nj1, int nj2       /* dealiasing stretch */, 
-	     int nx, int ny, int nz /* data size */, 
-	     float *yy              /* data [nz*ny*nx] */, 
-	     bool **m               /* dip mask [both? 4:2][nz*ny*nx] */) 
-/*< two-dip masks in 3-D >*/
-{
-    int ix, iy, iz, iw, is, i, n;
-    bool *xx;
-
-    n = nx*ny*nz;
-
-    xx = ps_boolalloc(n);
-
-    for (i=0; i < n; i++) {
-	xx[i] = (bool) (yy[i] == 0.);
-	m[0][i] = false;
-	m[1][i] = false;
-	if (both) {
-	    m[2][i] = false;
-	    m[3][i] = false;
-	}
-    }
-
-    for (iz=0; iz < nz; iz++) {
-	for (iy=0; iy < ny-1; iy++) {
-	    for (ix = nw*nj1; ix < nx-nw*nj1; ix++) {
-		i = ix + nx * (iy + ny * iz);
-
-		for (iw = 0; iw <= 2*nw; iw++) {
-		    is = (iw-nw)*nj1;		  
-		    m[0][i] = (bool) (m[0][i] || xx[i-is] || xx[i+nx+is]);
-		}
-	    }
-	}
-    }
-
-    for (iz=0; iz < nz-1; iz++) {
-	for (iy=0; iy < ny; iy++) {
-	    for (ix = nw*nj2; ix < nx-nw*nj2; ix++) {
-		i = ix + nx * (iy + ny * iz);
-
-		for (iw = 0; iw <= 2*nw; iw++) {
-		    is = (iw-nw)*nj2;		  
-		    m[1][i] = (bool) (m[1][i] || xx[i-is] || xx[i+ny*nx+is]);
-		}
-	    }
-	}
-    }
-
-    if (!both) {
-	free(xx);
-	return;
-    }
-
-    for (iz=0; iz < nz; iz++) {
-	for (iy=1; iy < ny; iy++) {
-	    for (ix = nw*nj1; ix < nx-nw*nj1; ix++) {
-		i = ix + nx * (iy + ny * iz);
-
-		for (iw = 0; iw <= 2*nw; iw++) {
-		    is = (iw-nw)*nj1;		  
-		    m[2][i] = (bool) (m[2][i] || xx[i-is] || xx[i-nx+is]);
-		}
-	    }
-	}
-    }
-
-    for (iz=1; iz < nz; iz++) {
-	for (iy=0; iy < ny; iy++) {
-	    for (ix = nw*nj2; ix < nx-nw*nj2; ix++) {
-		i = ix + nx * (iy + ny * iz);
-
-		for (iw = 0; iw <= 2*nw; iw++) {
-		    is = (iw-nw)*nj2;		  
-		    m[3][i] = (bool) (m[3][i] || xx[i-is] || xx[i-ny*nx+is]);
-		}
-	    }
-	}
-    }
-	
-    free(xx); 
-}
-
-void mask3 (int nw         /* filter size */, 
-	    int nj         /* dealiasing stretch */, 
-	    int nx, int ny /* data size */, 
-	    float **yy     /* data */, 
-	    bool **mm      /* mask */) 
-/*< one-dip mask in 2-D >*/
-{
-    int ix, iy, iw, is;
-    bool **xx;
-
-    xx = ps_boolalloc2(nx,ny);
-    
-    for (iy=0; iy < ny; iy++) {
-	for (ix=0; ix < nx; ix++) {
-	    xx[iy][ix] = (bool) (yy[iy][ix] == 0.);
-	    mm[iy][ix] = false;
-	}
-    }
-
-    for (iy=0; iy < ny-1; iy++) {
-	for (ix = nw*nj; ix < nx-nw*nj; ix++) {
-	    for (iw = 0; iw <= 2*nw; iw++) {
-		is = (iw-nw)*nj;
-		mm[iy][ix] = (bool) (mm[iy][ix] || xx[iy+1][ix+is] || xx[iy][ix-is]);
-	    }
-	}
-    }
-    
-    free(xx[0]);
-    free(xx);
-}
-
-void mask6 (int nw           /* filter size */, 
-	    int nj1, int nj2 /* dealiasing stretch */, 
-	    int nx, int ny   /* data size */, 
-	    float *yy       /* data [ny][nx] */, 
-	    bool *mm        /* mask [ny][nx] */) 
-/*< two-dip mask in 2-D >*/
-{
-    int ix, iy, iw, is, n, i;
-    bool *xx;
-
-    n = nx*ny;
-
-    xx = ps_boolalloc(n);
-    
-    for (i=0; i < n; i++) {
-	mm[i] = (bool) (yy[i] == 0.);
-	xx[i] = false;
-    }
-
-    for (iy=0; iy < ny-1; iy++) {
-	for (ix = nw*nj1; ix < nx-nw*nj1; ix++) {
-	    i = ix + nx*iy;
-
-	    for (iw = 0; iw <= 2*nw; iw++) {
-		is = (iw-nw)*nj1;
-		xx[i] = (bool) (xx[i] || mm[i+nx+is] || mm[i-is]);
-	    }
-	}
-    }
-    
-    for (i=0; i < n; i++) {
-	mm[i] = false;
-    }
-    
-    for (iy=0; iy < ny-1; iy++) {
-	for (ix = nw*nj2; ix < nx-nw*nj2; ix++) {
-	    i = ix + nx*iy;
-	    
-	    for (iw = 0; iw <= 2*nw; iw++) {
-		is = (iw-nw)*nj2;
-		mm[i] = (bool) (mm[i] || xx[i+nx+is] || xx[i-is]);
-	    }
-	}
-    }
-    
-    free(xx);
-}
-
-
-
-
-
-
-/*from allp3.c*/
-#ifndef _allp3_h
-typedef struct Allpass *allpass;
-/* abstract data type */
-/*^*/
-
-#endif
-
-
-
-struct Allpass {
-    int nx, ny, nz, nw, nj;
-    bool drift;
-    float *flt, *pp;
-};
-
-static allpass ap1, ap2;
-
-allpass allpass_init(int nw                 /* filter size */, 
-		     int nj                 /* filter step */, 
-		     int nx, int ny, int nz /* data size */, 
-		     bool drift             /* if shift filter */,
-		     float *pp              /* dip [nz*ny*nx] */)
-/*< Initialize >*/
-{
-    allpass ap;
-
-    ap = (allpass) ps_alloc(1,sizeof(*ap));
-
-    ap->nw = nw;
-    ap->nj = nj;
-    ap->nx = nx;
-    ap->ny = ny;
-    ap->nz = nz;
-    ap->drift = drift;
-    ap->pp = pp;
-
-    ap->flt = ps_floatalloc(2*nw+1);
-    apfilt_init(nw);
-
-    return ap;
-}
-
-void allpass_close(allpass ap)
-/*< free allocated storage >*/
-{
-    apfilt_close();
-    free(ap->flt);
-    free(ap);
-}
-
-void allpass1 (bool left        /* left or right prediction */,
-	       bool der         /* derivative flag */, 
-	       const allpass ap /* PWD object */, 
-	       float* xx        /* input */, 
-	       float* yy        /* output */)
-/*< in-line plane-wave destruction >*/
-{
-    int ix, iy, iz, iw, is, i, nx, ny, nz, i1, i2, ip, id;
-
-    nx = ap->nx;
-    ny = ap->ny;
-    nz = ap->nz;
-
-    if (left) {
-	i1=1; i2=ny;   ip=-nx;
-    } else {
-	i1=0; i2=ny-1; ip=nx;
-    }
-
-    for (iz=0; iz < nz; iz++) {
-	for (iy=0; iy < ny; iy++) {
-	    for (ix=0; ix < nx; ix++) {
-		i = ix + nx * (iy + ny * iz);
-		yy[i] = 0.;
-	    }
-	}
-    }
-  
-    for (iz=0; iz < nz; iz++) {
-	for (iy=i1; iy < i2; iy++) {
-	    for (ix = ap->nw*ap->nj; ix < nx-ap->nw*ap->nj; ix++) {
-		i = ix + nx * (iy + ny * iz);
-
-		if (ap->drift) {
-		    id = PS_NINT(ap->pp[i]);
-		    if (ix-ap->nw*ap->nj-id < 0 || 
-			ix+ap->nw*ap->nj-id >= nx) continue;
-
-		    if (der) {
-			aderfilter(ap->pp[i]-id, ap->flt);
-		    } else {
-			passfilter(ap->pp[i]-id, ap->flt);
-		    }
-		    
-		    for (iw = 0; iw <= 2*ap->nw; iw++) {
-			is = (iw-ap->nw)*ap->nj;
-			
-			yy[i] += (xx[i+is+ip] - xx[i-is-id]) * ap->flt[iw];
-		    }		    
-		} else {
-		    if (der) {
-			aderfilter(ap->pp[i], ap->flt);
-		    } else {
-			passfilter(ap->pp[i], ap->flt);
-		    }
-		    
-		    for (iw = 0; iw <= 2*ap->nw; iw++) {
-			is = (iw-ap->nw)*ap->nj;
-			
-			yy[i] += (xx[i+is+ip] - xx[i-is]) * ap->flt[iw];
-		    }
-		}
-	    }
-	}
-    }
-}
-
-void allpass1t (bool left        /* left or right prediction */,
-	       bool der         /* derivative flag */, 
-	       const allpass ap /* PWD object */, 
-	       float* xx        /* input */, 
-	       float* yy        /* output */)
-/*< adjoint of in-line plane-wave destruction >*/
-{
-    int ix, iy, iz, iw, is, i, nx, ny, nz, i1, i2, ip, id;
-
-    nx = ap->nx;
-    ny = ap->ny;
-    nz = ap->nz;
-
-    if (left) {
-	i1=1; i2=ny;   ip=-nx;
-    } else {
-	i1=0; i2=ny-1; ip=nx;
-    }
-
-    for (iz=0; iz < nz; iz++) {
-	for (iy=0; iy < ny; iy++) {
-	    for (ix=0; ix < nx; ix++) {
-		i = ix + nx * (iy + ny * iz);
-		xx[i] = 0.;
-	    }
-	}
-    }
-  
-    for (iz=0; iz < nz; iz++) {
-	for (iy=i1; iy < i2; iy++) {
-	    for (ix = ap->nw*ap->nj; ix < nx-ap->nw*ap->nj; ix++) {
-		i = ix + nx * (iy + ny * iz);
-
-		if (ap->drift) {
-		    id = PS_NINT(ap->pp[i]);
-		    if (ix-ap->nw*ap->nj-id < 0 || 
-			ix+ap->nw*ap->nj-id >= nx) continue;
-
-		    if (der) {
-			aderfilter(ap->pp[i]-id, ap->flt);
-		    } else {
-			passfilter(ap->pp[i]-id, ap->flt);
-		    }
-		    
-		    for (iw = 0; iw <= 2*ap->nw; iw++) {
-			is = (iw-ap->nw)*ap->nj;
-			
-			xx[i+is+ip] += yy[i] * ap->flt[iw];
-			xx[i-is-id] -= yy[i] * ap->flt[iw];
-		    }
-		} else {
-		    if (der) {
-			aderfilter(ap->pp[i], ap->flt);
-		    } else {
-			passfilter(ap->pp[i], ap->flt);
-		    }
-		    
-		    for (iw = 0; iw <= 2*ap->nw; iw++) {
-			is = (iw-ap->nw)*ap->nj;
-			
-			xx[i+is+ip] += yy[i] * ap->flt[iw];
-			xx[i-is]    -= yy[i] * ap->flt[iw];
-		    }
-		}
-	    }
-	}
-    }
-}
-
-void left1 (bool left        /* left or right prediction */,
-	       bool der         /* derivative flag */, 
-	       const allpass ap /* PWD object */, 
-	       float* xx        /* input */, 
-	       float* yy        /* output */)
-/*< left part of in-line plane-wave destruction >*/
-{
-    int ix, iy, iz, iw, is, i, nx, ny, nz, i1, i2, ip, id;
-
-    nx = ap->nx;
-    ny = ap->ny;
-    nz = ap->nz;
-
-    if (left) {
-	i1=1; i2=ny;   ip=-nx;
-    } else {
-	i1=0; i2=ny-1; ip=nx;
-    }
-
-    for (iz=0; iz < nz; iz++) {
-	for (iy=0; iy < ny; iy++) {
-	    for (ix=0; ix < nx; ix++) {
-		i = ix + nx * (iy + ny * iz);
-		yy[i] = 0.;
-	    }
-	}
-    }
-  
-    for (iz=0; iz < nz; iz++) {
-	for (iy=i1; iy < i2; iy++) {
-	    for (ix = ap->nw*ap->nj; ix < nx-ap->nw*ap->nj; ix++) {
-		i = ix + nx * (iy + ny * iz);
-
-		if (ap->drift) {
-		    id = PS_NINT(ap->pp[i]);
-		    if (ix-ap->nw*ap->nj-id < 0 || 
-			ix+ap->nw*ap->nj-id >= nx) continue;
-
-		    if (der) {
-			aderfilter(ap->pp[i]-id, ap->flt);
-		    } else {
-			passfilter(ap->pp[i]-id, ap->flt);
-		    }
-		} else {
-		    if (der) {
-			aderfilter(ap->pp[i], ap->flt);
-		    } else {
-			passfilter(ap->pp[i], ap->flt);
-		    }
-		}
-
-		for (iw = 0; iw <= 2*ap->nw; iw++) {
-		    is = (iw-ap->nw)*ap->nj;
-		    
-		    yy[i] += xx[i+is+ip] * ap->flt[iw];
-		}
-	    }
-	}
-    }
-}
-
-void right1 (bool left        /* left or right prediction */,
-	       bool der         /* derivative flag */, 
-	       const allpass ap /* PWD object */, 
-	       float* xx        /* input */, 
-	       float* yy        /* output */)
-/*< right part of in-line plane-wave destruction >*/
-{
-    int ix, iy, iz, iw, is, i, nx, ny, nz, i1, i2, id;
-
-    nx = ap->nx;
-    ny = ap->ny;
-    nz = ap->nz;
-
-    if (left) {
-	i1=1; i2=ny;   
-    } else {
-	i1=0; i2=ny-1;
-    }
-
-    for (iz=0; iz < nz; iz++) {
-	for (iy=0; iy < ny; iy++) {
-	    for (ix=0; ix < nx; ix++) {
-		i = ix + nx * (iy + ny * iz);
-		yy[i] = 0.;
-	    }
-	}
-    }
-  
-    for (iz=0; iz < nz; iz++) {
-	for (iy=i1; iy < i2; iy++) {
-	    for (ix = ap->nw*ap->nj; ix < nx-ap->nw*ap->nj; ix++) {
-		i = ix + nx * (iy + ny * iz);
-
-		if (ap->drift) {
-		    id = PS_NINT(ap->pp[i]);
-		    if (ix-ap->nw*ap->nj-id < 0 || 
-			ix+ap->nw*ap->nj-id >= nx) continue;
-		    
-		    if (der) {
-			aderfilter(ap->pp[i]-id, ap->flt);
-		    } else {
-			passfilter(ap->pp[i]-id, ap->flt);
-		    }
-		    
-		    for (iw = 0; iw <= 2*ap->nw; iw++) {
-			is = (iw-ap->nw)*ap->nj;
-			
-			yy[i] += xx[i-is-id] * ap->flt[iw];
-		    }
-		} else {
-		    if (der) {
-			aderfilter(ap->pp[i], ap->flt);
-		    } else {
-			passfilter(ap->pp[i], ap->flt);
-		    }
-		    
-		    for (iw = 0; iw <= 2*ap->nw; iw++) {
-			is = (iw-ap->nw)*ap->nj;
-			
-			yy[i] += xx[i-is] * ap->flt[iw];
-		    }
-		}
-	    }
-	}
-    }
-}
-
-void allpass2 (bool left        /* left or right prediction */,
-	       bool der         /* derivative flag */, 
-	       const allpass ap /* PWD object */, 
-	       float* xx        /* input */, 
-	       float* yy        /* output */)
-/*< cross-line plane-wave destruction >*/
-{
-    int ix, iy, iz, iw, is, i, nx, ny, nz, i1, i2, ip, id;
-
-    nx = ap->nx;
-    ny = ap->ny;
-    nz = ap->nz;
-
-    if (left) {
-	i1=1; i2=nz;   ip=-nx*ny;
-    } else {
-	i1=0; i2=nz-1; ip=nx*ny;
-    }
-    
-    for (iz=0; iz < nz; iz++) {
-	for (iy=0; iy < ny; iy++) {
-	    for (ix=0; ix < nx; ix++) {
-		i = ix + nx * (iy + ny * iz);
-		yy[i] = 0.;
-	    }
-	}
-    }
-    
-    for (iz=i1; iz < i2; iz++) {
-	for (iy=0; iy < ny; iy++) {
-	    for (ix = ap->nw*ap->nj; ix < nx-ap->nw*ap->nj; ix++) {
-		i = ix + nx * (iy + ny * iz);
-		
-		if (ap->drift) {
-		    id = PS_NINT(ap->pp[i]);
-		    if (ix-ap->nw*ap->nj-id < 0 || 
-			ix+ap->nw*ap->nj-id >= nx) continue;
-
-		    if (der) {
-			aderfilter(ap->pp[i]-id, ap->flt);
-		    } else {
-			passfilter(ap->pp[i]-id, ap->flt);
-		    }
-		    
-		    for (iw = 0; iw <= 2*ap->nw; iw++) {
-			is = (iw-ap->nw)*ap->nj;
-			
-			yy[i] += (xx[i+is+ip] - xx[i-is-id]) * ap->flt[iw];
-		    }
-
-		} else {
-		    if (der) {
-			aderfilter(ap->pp[i], ap->flt);
-		    } else {
-			passfilter(ap->pp[i], ap->flt);
-		    }
-		    
-		    for (iw = 0; iw <= 2*ap->nw; iw++) {
-			is = (iw-ap->nw)*ap->nj;
-			
-			yy[i] += (xx[i+is+ip] - xx[i-is]) * ap->flt[iw];
-		    }
-		}
-	    }
-	}
-    }
-}
-
-void allpass3_init (allpass ap, allpass aq)
-/*< Initialize linear operator >*/
-{
-    ap1 = ap;
-    ap2 = aq;
-}
-
-void allpass3_lop (bool adj, bool add, int n1, int n2, float* xx, float* yy)
-/*< PWD as linear operator >*/
-{
-    int i, ix, iy, iz, iw, is, nx, ny, nz, nw, nj, id;
-
-//     if (n2 != 2*n1) ps_error("%s: size mismatch: %d != 2*%d",__FILE__,n2,n1);
-
-    ps_adjnull(adj, add, n1, n2, xx, yy);
-
-    nx = ap1->nx;
-    ny = ap1->ny;
-    nz = ap1->nz;
-    nw = ap1->nw;
-    nj = ap1->nj;
-
-//     if (nx*ny*nz != n1) ps_error("%s: size mismatch",__FILE__);
-    
-    for (iz=0; iz < nz; iz++) {
-	for (iy=0; iy < ny-1; iy++) {
-	    for (ix = nw*nj; ix < nx-nw*nj; ix++) {
-		i = ix + nx*(iy + ny*iz);
-
-		if (ap1->drift) {
-		    id = PS_NINT(ap1->pp[i]);
-		    if (ix-nw*nj-id < 0 || 
-			ix+nw*nj-id >= nx) continue;
-
-		    passfilter(ap1->pp[i]-id, ap1->flt);
-		    
-		    for (iw = 0; iw <= 2*nw; iw++) {
-			is = (iw-nw)*nj;
-			
-			if (adj) {
-			    xx[i+nx+is] += yy[i] * ap1->flt[iw];
-			    xx[i-is-id] -= yy[i] * ap1->flt[iw];
-			} else {
-			    yy[i] += (xx[i+nx+is] - xx[i-is-id]) * ap1->flt[iw];
-			}
-		    }
-		} else {
-		    passfilter(ap1->pp[i], ap1->flt);
-		    
-		    for (iw = 0; iw <= 2*nw; iw++) {
-			is = (iw-nw)*nj;
-			
-			if (adj) {
-			    xx[i+nx+is] += yy[i] * ap1->flt[iw];
-			    xx[i-is]    -= yy[i] * ap1->flt[iw];
-			} else {
-			    yy[i] += (xx[i+nx+is] - xx[i-is]) * ap1->flt[iw];
-			}
-		    }
-		}
-	    }
-	}
-    }
-
-    nx = ap2->nx;
-    ny = ap2->ny;
-    nz = ap2->nz;
-    nw = ap2->nw;
-    nj = ap2->nj;
-
-//     if (nx*ny*nz != n1) ps_error("%s: size mismatch",__FILE__);
-    
-    for (iz=0; iz < nz-1; iz++) {
-	for (iy=0; iy < ny; iy++) {
-	    for (ix = nw*nj; ix < nx-nw*nj; ix++) {
-		i = ix + nx*(iy + ny*iz);
-
-		if (ap2->drift) {
-		    id = PS_NINT(ap2->pp[i]);
-		    if (ix-nw*nj-id < 0 || 
-			ix+nw*nj-id >= nx) continue;
-
-		    passfilter(ap2->pp[i]-id, ap2->flt);
-		    
-		    for (iw = 0; iw <= 2*nw; iw++) {
-			is = (iw-nw)*nj;
-			
-			if (adj) {
-			    xx[i+nx*ny+is] += yy[i+n1] * ap2->flt[iw];
-			    xx[i-is-id]    -= yy[i+n1] * ap2->flt[iw];
-			} else {
-			    yy[i+n1] += (xx[i+nx*ny+is] - xx[i-is-id]) * ap2->flt[iw];
-			}
-		    }
-		} else {
-		    passfilter(ap2->pp[i], ap2->flt);
-		    
-		    for (iw = 0; iw <= 2*nw; iw++) {
-			is = (iw-nw)*nj;
-			
-			if (adj) {
-			    xx[i+nx*ny+is] += yy[i+n1] * ap2->flt[iw];
-			    xx[i-is]       -= yy[i+n1] * ap2->flt[iw];
-			} else {
-			    yy[i+n1] += (xx[i+nx*ny+is] - xx[i-is]) * ap2->flt[iw];
-			}
-		    }
-		}
-	    }
-	}
-    }
-}
-
-
-/*from dip3.c*/
-static float *u1, *u2, *dp, *p0, eps;
-static int nd, n1, n2, n3, nn[3];
-
-void dip3_init(int m1, int m2, int m3 /* dimensions */, 
-	       int* rect              /* smoothing radius [3] */, 
-	       int niter              /* number of iterations */,
-	       float eps1             /* regularization */,      
-	       bool verb              /* verbosity flag */)
-/*< initialize >*/
-{
-    n1=m1;
-    n2=m2;
-    n3=m3;
-    nd = n1*n2*n3; /*number of data samples*/
-    eps = eps1;
-
-    u1 = ps_floatalloc(nd);
-    u2 = ps_floatalloc(nd);
-    dp = ps_floatalloc(nd);
-    p0 = ps_floatalloc(nd);
-
-    nn[0]=n1;
-    nn[1]=n2;
-    nn[2]=n3;
-
-    ps_divn_init (3, nd, nn, rect, niter, verb);
-}
-
-void dip3_close(void)
-/*< free allocated storage >*/
-{
-    free (u1);
-    free (u2);
-    free (dp);
-    ps_divn_close();
-}
-
-void dip3(bool left               /* left or right prediction */,
-	  int dip                 /* 1 - inline, 2 - crossline */, 
-	  int niter               /* number of nonlinear iterations */, 
-	  int nw                  /* filter size */, 
-	  int nj                  /* filter stretch for aliasing */, 
-	  bool drift              /* if shift filter */,
-	  float *u                /* input data */, 
-	  float* p                /* output dip */, 
-	  bool* mask              /* input mask for known data */,
-	  float pmin, float pmax  /* minimum and maximum dip */)
-/*< estimate local dip >*/
-{
-    int i, iter, k;
-    float usum, usum2, pi, lam;
-    allpass ap;
- 
-    ap = allpass_init (nw,nj,n1,n2,n3,drift,p);
-
-    if (dip == 1) {
-	allpass1 (left, false, ap, u,u2);
-    } else {
-	allpass2 (left, false, ap, u,u2);
-    }
-
-    for (iter =0; iter < niter; iter++) {
-	if (dip == 1) {
-	    allpass1 (left, true,  ap, u,u1);
-	} else {
-	    allpass2 (left, true,  ap, u,u1);
-	}
-
-	usum = 0.0;
-	for(i=0; i < nd; i++) {
-	    p0[i] = p[i];
-	    usum += u2[i]*u2[i];
-	}
-	
-	if (NULL != mask) {
-	    for(i=0; i < nd; i++) {
-		if (mask[i]) {
-		    u1[i] = 0.;
-		    u2[i] = 0.;
-		}
-	    }
-	}
-
-	ps_divne (u2, u1, dp, eps);
-
-	lam = 1.;
-	for (k=0; k < 8; k++) {
-	    for(i=0; i < nd; i++) {
-		pi = p0[i]+lam*dp[i];
-		if (pi < pmin) pi=pmin;
-		if (pi > pmax) pi=pmax;
-		p[i] = pi;
-	    }
-	    if (dip == 1) {
-		allpass1 (left, false, ap, u,u2);
-	    } else {
-		allpass2 (left, false, ap, u,u2);
-	    }
-
-	    usum2 = 0.;
-	    for(i=0; i < nd; i++) {
-		usum2 += u2[i]*u2[i];
-	    }
-	    if (usum2 < usum) break;
-	    lam *= 0.5;
-	}
-    } /* iter */
-
-    allpass_close(ap);
 }
 
 void mcp(float *dst /*destination*/, 
@@ -1707,7 +838,7 @@ void mcp(float *dst /*destination*/,
 static PyObject *Clocalortho(PyObject *self, PyObject *args){
     
 	/**initialize data input**/
-    int i2, n1, n2, n123, nd2;
+    int i2, n1, n2, n3, n123, nd2;
     float *data,*din;
     int verb;
     int r1,r2,r3,diff1,diff2,diff3,box1,box2,box3;
@@ -1726,13 +857,9 @@ static PyObject *Clocalortho(PyObject *self, PyObject *args){
 	int niter; float eps;
     
 	PyArg_ParseTuple(args, "OOiiiiiiifi", &f1, &f2, &n1, &n2, &n3, &r1, &r2, &r3, &niter, &eps, &verb);
-    
-//     Clocalortho(signal,noise,n1,n2,n3,r1,r2,r3,niter,eps,verb);
-    
+        
     printf("n1=%d,n2=%d,n3=%d,r1=%d,r2=%d,r3=%d\n",n1,n2,n3,r1,r2,r3);
     printf("niter=%d,eps=%g,verb=%d\n",niter,eps,verb);
-//     printf("diff1=%d,diff2=%d,diff3=%d,box1=%d,box2=%g,box3=%d\n",diff1,diff2,diff3,box1,box2,box3);
-//     printf("repeat=%d,adj=%d\n",repeat,adj);
     
 	n123=n1*n2*n3;
 	
@@ -1770,28 +897,12 @@ static PyObject *Clocalortho(PyObject *self, PyObject *args){
 	
 	n[0]=n1;n[1]=n2;n[2]=n3;
 	s[0]=1;s[1]=n1;s[2]=n1*n2;
-// 	diff[0]=diff1;diff[1]=diff2;diff[2]=diff3;
-// 	box[0]=box1;box[1]=box2;box[2]=box3;
 	rect[0]=r1;rect[1]=r2;rect[2]=r3;
-// 	nrep=repeat;
-	
-// 	if(dim1==0)
-// 	n2=n2*n3;
-// 	else
-// 	{
-// 	if(dim1==1)
-// 	{n1=n1*n2;n2=n3;}
-// 	else
-// 	{n1=n1*n2*n3;n2=1;}
-// 	}
 	
 	nd=n1*n2*n3;
 	
 	printf("dim=%d,dim1=%d\n",dim,dim1);
 	printf("nd=%d\n",nd);
-
-//     din = ps_floatalloc(n123);
-//     data = ps_floatalloc(n1);
 
     noi = ps_floatalloc(nd);
     sig = ps_floatalloc(nd);
@@ -1812,20 +923,8 @@ static PyObject *Clocalortho(PyObject *self, PyObject *args){
     {
         noi[i]=*((float*)PyArray_GETPTR1(arrf2,i));
     }
-    
-//     if (!ps_getint("niter",&niter)) niter=100;
-//     /* number of iterations */
-// 
-//     if (!ps_getbool("verb",&verb)) verb=true;
-//     /* verbosity */
-// 
-//     if (!ps_getfloat("eps",&eps)) eps=0.0f;
-//     /* regularization */
 
     ps_divn_init(dim, nd, n, rect, niter, verb);
-
-//     ps_floatread(noi,nd,fnoi);
-//     ps_floatread(sig,nd,fsig);
 
     for (id=0; id < nd; id++) {
 	noi2[id] = noi[id];
@@ -1855,11 +954,120 @@ static PyObject *Clocalortho(PyObject *self, PyObject *args){
 	for(i=0;i<dims[0];i++)
 		(*((float*)PyArray_GETPTR1(vecout,i))) = data2[i];
 
+	/*free memory*/
+	free(sig);free(noi);free(sig2);free(noi2);free(rat);free(data2);
+	
 	return PyArray_Return(vecout);
 	
 }
 
+static PyObject *Clocalsimi(PyObject *self, PyObject *args){
+    
+	/**initialize data input**/
+    int i2, n1, n2, n3, n123, nd2;
+    float *data,*din;
+    int verb;
+    int r1,r2,r3,diff1,diff2,diff3,box1,box2,box3;
+    int repeat,adj;
+	ps_triangle tr;
+	float *one, *two, *rat1, *rat2;
+	int id, nd;
+	
+    PyObject *f1=NULL;
+    PyObject *arrf1=NULL;
+    PyObject *f2=NULL;
+    PyObject *arrf2=NULL;
+    
+	int niter; float eps;
+    
+	PyArg_ParseTuple(args, "OOiiiiiiifi", &f1, &f2, &n1, &n2, &n3, &r1, &r2, &r3, &niter, &eps, &verb);
+        
+    printf("n1=%d,n2=%d,n3=%d,r1=%d,r2=%d,r3=%d\n",n1,n2,n3,r1,r2,r3);
+    printf("niter=%d,eps=%g,verb=%d\n",niter,eps,verb);
+    
+	n123=n1*n2*n3;
+	
+    arrf1 = PyArray_FROM_OTF(f1, NPY_FLOAT, NPY_IN_ARRAY);
+    arrf2 = PyArray_FROM_OTF(f2, NPY_FLOAT, NPY_IN_ARRAY);
+    
+    nd2=PyArray_NDIM(arrf1);
+    npy_intp *sp=PyArray_SHAPE(arrf1);
+	
+    if (*sp != n123)
+    {
+    	printf("Dimension mismatch, N_input = %d, N_data = %d\n", *sp, n123);
+    	return NULL;
+    }
 
+    int dim, dim1, i, j, n[PS_MAX_DIM], rect[PS_MAX_DIM], s[PS_MAX_DIM];
+    int nrep, irep, i0;
+    bool diff[PS_MAX_DIM], box[PS_MAX_DIM];
+    
+    
+	if(n3>1)
+		dim=3;
+	else
+		dim=2;
+		
+	if(r3>1)
+	dim1=2;
+	else
+	{
+	if(r2>1)
+	dim1=1;
+	else
+	dim1=0;
+	}
+	
+	n[0]=n1;n[1]=n2;n[2]=n3;
+	s[0]=1;s[1]=n1;s[2]=n1*n2;
+	rect[0]=r1;rect[1]=r2;rect[2]=r3;
+	nd=n1*n2*n3;
+	
+	printf("dim=%d,dim1=%d\n",dim,dim1);
+	printf("nd=%d\n",nd);  
+
+    ps_divn_init(dim, nd, n, rect, niter, verb);
+	
+    one  = ps_floatalloc(nd);
+    two  = ps_floatalloc(nd);
+    rat1 = ps_floatalloc(nd);
+    rat2 = ps_floatalloc(nd);
+
+    /*reading data*/
+    for (i=0; i<nd; i++)
+    {
+        one[i]=*((float*)PyArray_GETPTR1(arrf1,i));
+    }
+
+    for (i=0; i<nd; i++)
+    {
+        two[i]=*((float*)PyArray_GETPTR1(arrf2,i));
+    }
+	
+	ps_divne(one,two,rat1,eps);
+    ps_divne(two,one,rat2,eps);
+
+	/* combination */
+	ps_divn_combine (rat1,rat2,rat1);
+
+
+    /*Below is the output part*/
+    PyArrayObject *vecout;
+	npy_intp dims[2];
+	dims[0]=nd;dims[1]=1;
+	/* Parse tuples separately since args will differ between C fcns */
+	/* Make a new double vector of same dimension */
+	vecout=(PyArrayObject *) PyArray_SimpleNew(1,dims,NPY_FLOAT);
+	for(i=0;i<dims[0];i++)
+		(*((float*)PyArray_GETPTR1(vecout,i))) = rat1[i];
+
+	/*free memory*/
+	free(one);free(two);free(rat1);free(rat2);
+	
+	return PyArray_Return(vecout);
+	
+}
 
 // documentation for each functions.
 static char dipcfun_document[] = "Document stuff for dip...";
@@ -1868,6 +1076,7 @@ static char dipcfun_document[] = "Document stuff for dip...";
 // function_name, function, METH_VARARGS flag, function documents
 static PyMethodDef functions[] = {
   {"Clocalortho", Clocalortho, METH_VARARGS, dipcfun_document},
+  {"Clocalsimi", Clocalsimi, METH_VARARGS, dipcfun_document},
   {NULL, NULL, 0, NULL}
 };
 

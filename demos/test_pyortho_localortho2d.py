@@ -93,9 +93,15 @@ verb=1;
 ## Use Python 3 (Windows)
 d2 = np.squeeze(d2)  
 noi2 = np.squeeze(noi2)
-## calculate local similarity
-simi1=lo.localsimi(d1,noi1,[5,5,1],niter,eps,verb);
-simi2=lo.localsimi(d2,noi2,[5,5,1],niter,eps,verb);
+
+## calculate local similarity  (in python)
+# simi1=lo.localsimi(d1,noi1,[5,5,1],niter,eps,verb);
+# simi2=lo.localsimi(d2,noi2,[5,5,1],niter,eps,verb);
+
+## Faster calculation (in C)
+simi1=lo.localsimic(d1,noi1,[5,5,1],niter,eps,verb);
+simi2=lo.localsimic(d2,noi2,[5,5,1],niter,eps,verb);
+
 ## Use Python 3 (Windows)
 simi1 = np.squeeze(simi1)  
 simi2 = np.squeeze(simi2)

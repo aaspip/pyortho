@@ -22,7 +22,7 @@ orthoc_module = Extension('orthocfun', sources=['pyortho/src/orthocfuns.c'],
 
 setup(
     name="pyortho",
-    version="0.0.4",
+    version="0.0.5",
     license='GNU General Public License, Version 3 (GPLv3)',
     description="A python package for local signal-and-noise orthogonalization and local similarity calculation",
     long_description=long_description,

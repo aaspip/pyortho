@@ -1,3 +1,5 @@
+from orthocfun import *
+import numpy as np
 def localsimi(d1,d2,rect,niter=50,eps=0.0,verb=1):
 	#LOCALSIMI: calculate local similarity between two datasets
 	#
@@ -51,5 +53,31 @@ def localsimi(d1,d2,rect,niter=50,eps=0.0,verb=1):
 	simi=np.sqrt(np.abs(ratio*ratio1));
 	return simi
 
+def localsimic(d1,d2,rect,niter=50,eps=0.0,verb=1):
+	'''
+	LOCAORTHOC: Noise attenuation using local signal-and-noise
+	
+	'''
 
+	if d1.ndim==2:	#for 2D problems
+		d1=np.expand_dims(d1, axis=2)
+	
+	[n1,n2,n3]=d1.shape
+	
+	r1=rect[0];
+	r2=rect[1];
+	r3=rect[2];
+	
+	d1=np.float32(d1.flatten(order='F'));
+	d2=np.float32(d2.flatten(order='F'));
+	
+	print(n1,n2,n3,r1,r2,r3,niter,eps,verb);
+	simi=Clocalsimi(d1,d2,n1,n2,n3,r1,r2,r3,niter,eps,verb);
+	
+	simi=simi.reshape(n1,n2,n3,order='F')
+	
+	if n3==1:	#for 1D/2D problems
+		simi=np.squeeze(simi)
+		
+	return simi
 

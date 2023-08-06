@@ -107,9 +107,12 @@ verb=1;
 [d2,noi2,low]=lo.localorthoc(d1,noi1,rect,niter,eps,verb);
 
 
-## calculate local similarity
-simi1=lo.localsimi(d1,noi1,[5,5,5],niter,eps,verb);
-simi2=lo.localsimi(d2,noi2,[5,5,5],niter,eps,verb);
+## calculate local similarity (in python)
+# simi1=lo.localsimi(d1,noi1,[5,5,5],niter,eps,verb);
+# simi2=lo.localsimi(d2,noi2,[5,5,5],niter,eps,verb);
+## Faster calculation (in C)
+simi1=lo.localsimic(d1,noi1,[5,5,5],niter,eps,verb);
+simi2=lo.localsimic(d2,noi2,[5,5,5],niter,eps,verb);
 
 ## compare SNR
 print('SNR of initial denoising is %g'%lo.snr(d0,d1,2));

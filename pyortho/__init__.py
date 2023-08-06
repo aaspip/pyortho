@@ -43,6 +43,7 @@ logger.addHandler(ch)
 from .localortho import localortho
 from .localortho import localorthoc
 from .localsimi import localsimi
+from .localsimi import localsimic
 from .divne import divne
 from .drr3d import drr3d
 from .snr import snr
