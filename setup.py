@@ -1,21 +1,24 @@
 #!/usr/bin/env python
 # -*- encoding: utf8 -*-
-import glob
-import inspect
 import io
 import os
 
-from setuptools import find_packages
 from setuptools import setup
+from distutils.core import Extension
+import numpy
 
 
 long_description = """
 Source code: https://github.com/aaspip/pyortho""".strip() 
 
+
 def read(*names, **kwargs):
     return io.open(
         os.path.join(os.path.dirname(__file__), *names),
         encoding=kwargs.get("encoding", "utf8")).read()
+
+orthoc_module = Extension('orthocfun', sources=['pyortho/src/orthocfuns.c'], 
+										include_dirs=[numpy.get_include()])
 
 setup(
     name="pyortho",
@@ -26,6 +29,7 @@ setup(
     author="pyortho developing team",
     author_email="chenyk2016@gmail.com",
     url="https://github.com/aaspip/pyortho",
+    ext_modules=[orthoc_module],
     packages=['pyortho'],
     include_package_data=True,
     zip_safe=False,
@@ -44,7 +48,7 @@ setup(
         "License :: OSI Approved :: GNU General Public License v3 (GPLv3)"
     ],
     keywords=[
-        "seismology", "exploration seismology", "array seismology", "denoising", "science", "orthogonalization", "local orthogonalization", "local similarity", "signal-to-noise ratio", "damped rank reduction method"
+        "seismology", "earthquake seismology", "exploration seismology", "array seismology", "denoising", "science", "engineering", "structure", "local slope", "filtering"
     ],
     install_requires=[
         "numpy", "scipy", "matplotlib"
