@@ -88,7 +88,8 @@ rect=[20,20,1];
 eps=0;
 niter=20;
 verb=1;
-[d2,noi2,low]=lo.localortho(d1,noi1,rect,niter,eps,verb);
+# [d2,noi2,low]=lo.localortho(d1,noi1,rect,niter,eps,verb);
+[d2,noi2,low]=lo.localorthoc(d1,noi1,rect,niter,eps,verb);
 ## Use Python 3 (Windows)
 d2 = np.squeeze(d2)  
 noi2 = np.squeeze(noi2)

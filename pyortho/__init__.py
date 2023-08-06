@@ -41,6 +41,7 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 from .localortho import localortho
+from .localortho import localorthoc
 from .localsimi import localsimi
 from .divne import divne
 from .drr3d import drr3d

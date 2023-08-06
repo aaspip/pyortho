@@ -1690,305 +1690,6 @@ void dip3(bool left               /* left or right prediction */,
     allpass_close(ap);
 }
 
-
-static PyObject *dipc(PyObject *self, PyObject *args){
-	
-    /*Below is the input part*/
-    int f2,f3,f4,f5,f6,f7;
-    float f8,f9,f10;
-    int f11,f12,f13,f14,f15;
-    
-	/**initialize data input**/
-    int nd, nd2;
-    
-    PyObject *f1=NULL;
-    PyObject *arrf1=NULL;
-
-    
-	PyArg_ParseTuple(args, "Oiiiiiifffiiiii", &f1, &f2, &f3, &f4, &f5, &f6, &f7, &f8, &f9, &f10, &f11, &f12, &f13, &f14, &f15); 	
-    
-    int n123, niter, order, nj1,nj2, i,j, liter, dim;
-    int n[PS_MAX_DIM], rect[3], n4, nr, ir; 
-    float p0, q0, *u, *um, *p, *pi=NULL, *qi=NULL;
-    float pmin, pmax, qmin, qmax, eps;
-    char key[4];
-    bool verb, both, **mm, drift, hasmask;
-
-    dim=4;
-    if (dim < 2) n[1]=1;
-    if (dim < 3) n[2]=1;
-    n123 = n[0]*n[1]*n[2];
-    nr = 1;
-    for (j=3; j < dim; j++) {
-	nr *= n[j];
-    }
-
-//     if (!ps_getbool("both",&both)) 
-    both=false;
-    /* if y, compute both left and right predictions */
-
-//     if (1 == n[2]) {
-// 	n4=0;
-// 	if (both) ps_putint(out,"n3",2);
-//     } else {
-// 	if (!ps_getint("n4",&n4)) n4=2;
-// 	/* what to compute in 3-D. 0: in-line, 1: cross-line, 2: both */ 
-// 	if (n4 > 2) n4=2;
-// 	if (2==n4) {
-// 	    ps_putint(out,"n4",both? 4:2);
-// 	    for (j=3; j < dim; j++) {
-// 		snprintf(key,4,"n%d",both? j+4:j+2);
-// 		ps_putint(out,key,n[j]);
-// 	    }
-// 	} else if (both) {
-// 	    ps_putint(out,"n4",2);
-// 	    for (j=3; j < dim; j++) {
-// 		snprintf(key,4,"n%d",j+2);
-// 		ps_putint(out,key,n[j]);
-// 	    }
-// 	}
-//     }
-
-// 	n4=0;
-	
-    niter=5;
-    /* number of iterations */
-    liter=20;
-    /* number of linear iterations */
-    rect[0]=1;
-    /* dip smoothness on 1st axis */
-    rect[1]=1;
-    /* dip smoothness on 2nd axis */
-    rect[2]=1;
-    /* dip smoothness on 3rd axis */
-    p0=0.;
-    /* initial in-line dip */
-    q0=0.;
-    /* initial cross-line dip */
-    order=1;
-    /* accuracy order */
-    nj1=1;
-    /* in-line antialiasing */
-    nj2=1;
-    /* cross-line antialiasing */
-    drift=false;
-    /* if shift filter */
-    verb = false;
-    /* verbosity flag */
-    
-    /* minimum inline dip */
-    /* maximum inline dip */
-    /* minimum cross-line dip */
-    /* maximum cross-line dip */
-	pmin=-340282346638528859811704183484516925440.000000;
-	pmax=340282346638528859811704183484516925440.000000;
-	qmin=-340282346638528859811704183484516925440.000000;
-	qmax=340282346638528859811704183484516925440.000000;
-	/*printf("pmin pmax qmin qmax=%f,%f,%f,%f\n",pmin,pmax,qmin,qmax);*/
-
-	n[0]=f2;
-	n[1]=f3;
-	n[2]=f4;
-	n123=n[0]*n[1]*n[2];
-	niter=f5;
-	liter=f6;
-	order=f7;
-	eps=f8;
-	
-    rect[0]=f11;
-    rect[1]=f12;
-    rect[2]=f13;
-	hasmask=f14;
-	verb=f15;
-	
-    arrf1 = PyArray_FROM_OTF(f1, NPY_FLOAT, NPY_IN_ARRAY);
-    
-    nd2=PyArray_NDIM(arrf1);
-    npy_intp *sp=PyArray_SHAPE(arrf1);
-
-	
-	if(hasmask==0)
-    	if (*sp != n123)
-    	{
-    		printf("Dimension mismatch, N_input = %d, N_data = %d\n", *sp, n123);
-    		return NULL;
-    	}
-    if(verb)
-    {
-    printf("rect1=%d,rect2=%d,rect3=%d\n",rect[0],rect[1],rect[2]);
-	printf("both=%d,hasmask=%d,verb=%d\n",both,hasmask,verb);
-	printf("n123=%d\n",n123);
-	printf("eps_dv=%f\n",eps);
-	} 
-
-	if(n[2]==1)
-	{
-	n4=0;
-	p = ps_floatalloc(n123);
-	}
-	else
-	{
-	n4=2; /*calculate both inline and crossline dips*/
-	p = ps_floatalloc(n123*2);
-	}
-    u = ps_floatalloc(n123);
-    um = ps_floatalloc(n123); /*temporary array for mask*/
-    
-    
-    /*reading data*/
-    for (i=0; i<n123; i++)
-    {
-        u[i]=*((float*)PyArray_GETPTR1(arrf1,i));
-        p[i]=0;
-        if(n4==2)
-        	p[i+n123]=0;
-    }
-
-    /* initialize dip estimation */
-    dip3_init(n[0], n[1], n[2], rect, liter, eps, verb);
-
-
-
-    if (hasmask) {
-	mm = ps_boolalloc2(n123,both? 4:2);
-// 	mask = ps_input("mask");
-    } else {
-	mm = (bool**) ps_alloc(4,sizeof(bool*));
-	mm[0] = mm[1] = mm[2] = mm[3] = NULL;
-// 	mask = NULL;
-    }
-
-//     if (NULL != ps_getstring("idip")) {
-// 	/* initial in-line dip */
-// 	idip0 = ps_input("idip");
-// 	if (both) pi = ps_floatalloc(n123);
-//     } else {
-// 	idip0 = NULL;
-//     }
-
-//     if (NULL != ps_getstring("xdip")) {
-// 	/* initial cross-line dip */
-// 	xdip0 = ps_input("xdip");
-// 	if (both) qi = ps_floatalloc(n123);
-//     } else {
-// 	xdip0 = NULL;
-//     }
-
-	nr=1;
-    for (ir=0; ir < nr; ir++) {
-    	if (hasmask) {
-// 	    ps_floatread(u,n123,mask);
-    	for (i=0; i<n123; i++)
-        	um[i]=*((float*)PyArray_GETPTR1(arrf1,i+n123));
-	    mask32 (both, order, nj1, nj2, n[0], n[1], n[2], um, mm);
-	}
-	
-	if (1 != n4) {
-	    /* initialize t-x dip */
-// 	    if (NULL != idip0) {
-// 		if (both) {
-// // 		    ps_floatread(pi,n123,idip0);
-// 		    for(i=0; i < n123; i++) {
-// 			p[i] = pi[i];
-// 		    }
-// 		} else {
-// // 		    ps_floatread(p,n123,idip0);
-// 		}
-// 	    } else {
-		for(i=0; i < n123; i++) {
-		    p[i] = p0;
-// 		}
-	    }
-	    
-	    /* estimate t-x dip */
-	    dip3(false, 1, niter, order, nj1, drift, u, p, mm[0], pmin, pmax);
-	    
-	}
-
-	if (0 != n4) {
-	    /* initialize t-y dip */
-// 	    if (NULL != xdip0) {
-// 		if (both) {
-// 		    ps_floatread(qi,n123,xdip0);
-// 		    for(i=0; i < n123; i++) {
-// 			p[i] = qi[i];
-// 		    }
-// 		} else {
-// 		    ps_floatread(p,n123,xdip0);
-// 		}
-// 	    } else {
-		for(i=0; i < n123; i++) {
-		    p[i+n123] = q0;
-		}
-// 	    }	
-	    
-	    /* estimate t-y dip */
-	    dip3(false, 2, niter, order, nj2, drift, u, p+n123, mm[1], qmin, qmax);
-
-	}
-
-	if (!both) continue;
-
-	if (1 != n4) {
-	    /* initialize t-x dip */
-// 	    if (NULL != idip0) {
-// 		for(i=0; i < n123; i++) {
-// 		    p[i] = -pi[i];
-// 		}
-// 	    } else {
-		for(i=0; i < n123; i++) {
-		    p[i] = -p0;
-		}
-// 	    }
-	    
-	    /* estimate t-x dip */
-	    dip3(true, 1, niter, order, nj1, drift, u, p+n123*2, mm[2], -pmax, -pmin);
-
-	}
-
-	if (0 != n4) {
-	    /* initialize t-y dip */
-// 	    if (NULL != xdip0) {
-// 		for(i=0; i < n123; i++) {
-// 		    p[i] = -qi[i];
-// 		}
-// 	    } else {
-		for(i=0; i < n123; i++) {
-		    p[i] = -q0;
-		}
-// 	    }	
-	    
-	    /* estimate t-y dip */
-	    dip3(true, 2, niter, order, nj2, drift, u, p+n123*3, mm[3], -qmax, -qmin);
-	}	
-    }
-
-    /*Below is the output part*/
-    PyArrayObject *vecout;
-	npy_intp dims[2];
-	if(n4==0)
-	{dims[0]=n123;dims[1]=1;}
-	else
-	{
-	dims[0]=n123*2;dims[1]=1;
-	}
-	/* Parse tuples separately since args will differ between C fcns */
-	/* Make a new double vector of same dimension */
-	vecout=(PyArrayObject *) PyArray_SimpleNew(1,dims,NPY_FLOAT);
-	for(i=0;i<dims[0];i++)
-		(*((float*)PyArray_GETPTR1(vecout,i))) = p[i];
-
-	
-	free(p);
-	free(u);
-	free(um);
-	
-	
-	return PyArray_Return(vecout);
-	
-}
-
-
 void mcp(float *dst /*destination*/, 
 		float *src /*source*/,
 		int s1d /*starting index in dst*/,
@@ -2003,7 +1704,7 @@ void mcp(float *dst /*destination*/,
 	}
 }
 
-static PyObject *smoothcf(PyObject *self, PyObject *args){
+static PyObject *Clocalortho(PyObject *self, PyObject *args){
     
 	/**initialize data input**/
     int i2, n1, n2, n123, nd2;
@@ -2012,21 +1713,32 @@ static PyObject *smoothcf(PyObject *self, PyObject *args){
     int r1,r2,r3,diff1,diff2,diff3,box1,box2,box3;
     int repeat,adj;
 	ps_triangle tr;
-
+	int ndata2;
+	float *data2, *sig, *noi, *sig2, *noi2, *rat;
+	int id, nd;
+	float remove;
+	
     PyObject *f1=NULL;
     PyObject *arrf1=NULL;
-
+    PyObject *f2=NULL;
+    PyObject *arrf2=NULL;
     
-	PyArg_ParseTuple(args, "Oiiiiiiiiiiiiii", &f1, &n1, &n2, &n3, &repeat, &adj, &r1, &r2, &r3, &diff1, &diff2, &diff3, &box1, &box2, &box3);
+	int niter; float eps;
     
-    printf("n1=%d,n2=%d,n3=%d,r1=%d,r2=%g,r3=%d\n",n1,n2,n3,r1,r2,r3);
-    printf("diff1=%d,diff2=%d,diff3=%d,box1=%d,box2=%g,box3=%d\n",diff1,diff2,diff3,box1,box2,box3);
-    printf("repeat=%d,adj=%d\n",repeat,adj);
+	PyArg_ParseTuple(args, "OOiiiiiiifi", &f1, &f2, &n1, &n2, &n3, &r1, &r2, &r3, &niter, &eps, &verb);
+    
+//     Clocalortho(signal,noise,n1,n2,n3,r1,r2,r3,niter,eps,verb);
+    
+    printf("n1=%d,n2=%d,n3=%d,r1=%d,r2=%d,r3=%d\n",n1,n2,n3,r1,r2,r3);
+    printf("niter=%d,eps=%g,verb=%d\n",niter,eps,verb);
+//     printf("diff1=%d,diff2=%d,diff3=%d,box1=%d,box2=%g,box3=%d\n",diff1,diff2,diff3,box1,box2,box3);
+//     printf("repeat=%d,adj=%d\n",repeat,adj);
     
 	n123=n1*n2*n3;
 	
     arrf1 = PyArray_FROM_OTF(f1, NPY_FLOAT, NPY_IN_ARRAY);
-	
+    arrf2 = PyArray_FROM_OTF(f2, NPY_FLOAT, NPY_IN_ARRAY);
+    
     nd2=PyArray_NDIM(arrf1);
     npy_intp *sp=PyArray_SHAPE(arrf1);
 	
@@ -2058,65 +1770,90 @@ static PyObject *smoothcf(PyObject *self, PyObject *args){
 	
 	n[0]=n1;n[1]=n2;n[2]=n3;
 	s[0]=1;s[1]=n1;s[2]=n1*n2;
-	diff[0]=diff1;diff[1]=diff2;diff[2]=diff3;
-	box[0]=box1;box[1]=box2;box[2]=box3;
+// 	diff[0]=diff1;diff[1]=diff2;diff[2]=diff3;
+// 	box[0]=box1;box[1]=box2;box[2]=box3;
 	rect[0]=r1;rect[1]=r2;rect[2]=r3;
-	nrep=repeat;
+// 	nrep=repeat;
 	
-	if(dim1==0)
-	n2=n2*n3;
-	else
-	{
-	if(dim1==1)
-	{n1=n1*n2;n2=n3;}
-	else
-	{n1=n1*n2*n3;n2=1;}
-	}
+// 	if(dim1==0)
+// 	n2=n2*n3;
+// 	else
+// 	{
+// 	if(dim1==1)
+// 	{n1=n1*n2;n2=n3;}
+// 	else
+// 	{n1=n1*n2*n3;n2=1;}
+// 	}
+	
+	nd=n1*n2*n3;
 	
 	printf("dim=%d,dim1=%d\n",dim,dim1);
-	printf("n1=%d,n2=%d\n",n1,n2);
+	printf("nd=%d\n",nd);
 
-    din = ps_floatalloc(n123);
-    data = ps_floatalloc(n1);
+//     din = ps_floatalloc(n123);
+//     data = ps_floatalloc(n1);
+
+    noi = ps_floatalloc(nd);
+    sig = ps_floatalloc(nd);
+    rat = ps_floatalloc(nd);    
+
+    noi2 = ps_floatalloc(nd);
+    sig2 = ps_floatalloc(nd);
+
+    data2 = ps_floatalloc(nd*3);
     
     /*reading data*/
-    for (i=0; i<n123; i++)
+    for (i=0; i<nd; i++)
     {
-        din[i]=*((float*)PyArray_GETPTR1(arrf1,i));
+        sig[i]=*((float*)PyArray_GETPTR1(arrf1,i));
+    }
+
+    for (i=0; i<nd; i++)
+    {
+        noi[i]=*((float*)PyArray_GETPTR1(arrf2,i));
     }
     
-    for (i2=0; i2 < n2; i2++) {
-	
-	mcp(data,din,0,i2*n1,n1);
-	
-	for (i=0; i <= dim1; i++) {
-	    if (rect[i] <= 1) continue;
-	    tr = ps_triangle_init (rect[i],n[i],box[i]);
-	    for (j=0; j < n1/n[i]; j++) {
-		i0 = ps_first_index (i,j,dim1+1,n,s);
-		for (irep=0; irep < nrep; irep++) {
-		    if (adj) {
-			ps_smooth (tr,i0,s[i],diff[i],data);
-		    } else {
-			ps_smooth2 (tr,i0,s[i],diff[i],data);
-		    }
-		}
-	    }
-	    ps_triangle_close(tr);
-	}
-	
-	mcp(din,data,i2*n1,0,n1);
-    }   
+//     if (!ps_getint("niter",&niter)) niter=100;
+//     /* number of iterations */
+// 
+//     if (!ps_getbool("verb",&verb)) verb=true;
+//     /* verbosity */
+// 
+//     if (!ps_getfloat("eps",&eps)) eps=0.0f;
+//     /* regularization */
+
+    ps_divn_init(dim, nd, n, rect, niter, verb);
+
+//     ps_floatread(noi,nd,fnoi);
+//     ps_floatread(sig,nd,fsig);
+
+    for (id=0; id < nd; id++) {
+	noi2[id] = noi[id];
+	sig2[id] = sig[id];
+    }
+
+    ps_divne (noi, sig, rat, eps);
+
+    for (id=0; id < nd; id++) {
+	remove = rat[id]*sig2[id];
+	noi2[id] -= remove;
+	sig2[id] += remove;
+    }
     
+    mcp(data2,sig2,0,0,nd);
+    mcp(data2,noi2,nd,0,nd);
+    mcp(data2,rat,nd*2,0,nd);
+    
+    ndata2=nd*3;
     /*Below is the output part*/
     PyArrayObject *vecout;
 	npy_intp dims[2];
-	dims[0]=n123;dims[1]=1;
+	dims[0]=ndata2;dims[1]=1;
 	/* Parse tuples separately since args will differ between C fcns */
 	/* Make a new double vector of same dimension */
 	vecout=(PyArrayObject *) PyArray_SimpleNew(1,dims,NPY_FLOAT);
 	for(i=0;i<dims[0];i++)
-		(*((float*)PyArray_GETPTR1(vecout,i))) = din[i];
+		(*((float*)PyArray_GETPTR1(vecout,i))) = data2[i];
 
 	return PyArray_Return(vecout);
 	
@@ -2130,8 +1867,7 @@ static char dipcfun_document[] = "Document stuff for dip...";
 // defining our functions like below:
 // function_name, function, METH_VARARGS flag, function documents
 static PyMethodDef functions[] = {
-  {"dipc", dipc, METH_VARARGS, dipcfun_document},
-  {"smoothcf", smoothcf, METH_VARARGS, dipcfun_document},
+  {"Clocalortho", Clocalortho, METH_VARARGS, dipcfun_document},
   {NULL, NULL, 0, NULL}
 };
 
@@ -2139,14 +1875,14 @@ static PyMethodDef functions[] = {
 // for more informations, check head part of this file. there are some important links out there.
 static struct PyModuleDef dipcfunModule = {
   PyModuleDef_HEAD_INIT, // head informations for Python C API. It is needed to be first member in this struct !!
-  "dipcfun",  // module name
+  "orthocfun",  // module name
   NULL, // means that the module does not support sub-interpreters, because it has global state.
   -1,
   functions  // our functions list
 };
 
 // runs while initializing and calls module creation function.
-PyMODINIT_FUNC PyInit_dipcfun(void){
+PyMODINIT_FUNC PyInit_orthocfun(void){
   
     PyObject *module = PyModule_Create(&dipcfunModule);
     import_array();

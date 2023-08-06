@@ -1,3 +1,5 @@
+from orthocfun import *
+import numpy as np
 def localortho(signal,noise,rect,niter=50,eps=0.0,verb=1):
 	#LOCAORTHO: Noise attenuation using local signal-and-noise
 	#orthogonalization and output the local orthogonalization weight (LOW)
@@ -68,4 +70,38 @@ def localortho(signal,noise,rect,niter=50,eps=0.0,verb=1):
 
 	return signal2,noise2,low
 	
+def localorthoc(signal,noise,rect,niter=50,eps=0.0,verb=1):
+	'''
+	LOCAORTHOC: Noise attenuation using local signal-and-noise
 	
+	'''
+
+	if signal.ndim==2:	#for 2D problems
+		signal=np.expand_dims(signal, axis=2)
+	
+	[n1,n2,n3]=signal.shape
+	
+	r1=rect[0];
+	r2=rect[1];
+	r3=rect[2];
+	
+	signal=np.float32(signal.flatten(order='F'));
+	noise=np.float32(noise.flatten(order='F'));
+	
+	print(n1,n2,n3,r1,r2,r3,niter,eps,verb)
+	tmp=Clocalortho(signal,noise,n1,n2,n3,r1,r2,r3,niter,eps,verb);
+	
+	signal2=tmp[0:n1*n2*n3];
+	noise2=tmp[n1*n2*n3:n1*n2*n3*2];
+	low=tmp[n1*n2*n3*2:n1*n2*n3*3];
+
+	signal2=signal2.reshape(n1,n2,n3,order='F')
+	noise2=noise2.reshape(n1,n2,n3,order='F')
+	
+	if n3==1:	#for 1D/2D problems
+		signal2=np.squeeze(signal2)
+		noise2=np.squeeze(noise2)
+		low=np.squeeze(low)
+		
+	return signal2,noise2,low
+

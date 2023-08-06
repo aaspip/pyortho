@@ -102,7 +102,10 @@ niter=20;
 verb=1;
 
 ## calculate local orthogonalization
-[d2,noi2,low]=lo.localortho(d1,noi1,rect,niter,eps,verb);
+# [d2,noi2,low]=lo.localortho(d1,noi1,rect,niter,eps,verb);
+
+[d2,noi2,low]=lo.localorthoc(d1,noi1,rect,niter,eps,verb);
+
 
 ## calculate local similarity
 simi1=lo.localsimi(d1,noi1,[5,5,5],niter,eps,verb);
