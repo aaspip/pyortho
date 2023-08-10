@@ -345,7 +345,8 @@ void ps_conjgrad(operator prec  /* data preconditioning */,
 	
 	if (verb) printf("iteration %d res: %f grad: %f\n",
 			     iter,ps_cblas_snrm2(nr,r,1)/r0,dg);
-
+	/*Remember the cblas function defined here is correct*/
+	/*for some reasons, current public cblas library is not the same as this one*/
 	alpha = - gn / beta;
 
 	ps_cblas_saxpy(np,alpha,sp,1,p,1);
@@ -965,7 +966,7 @@ static PyObject *Clocalsimi(PyObject *self, PyObject *args){
     
 	/**initialize data input**/
     int i2, n1, n2, n3, n123, nd2;
-    float *data,*din;
+    float *data1,*data2,*data3,*din;
     int verb;
     int r1,r2,r3,diff1,diff2,diff3,box1,box2,box3;
     int repeat,adj;
@@ -1009,48 +1010,71 @@ static PyObject *Clocalsimi(PyObject *self, PyObject *args){
 	else
 		dim=2;
 		
-	if(r3>1)
-	dim1=2;
-	else
-	{
-	if(r2>1)
-	dim1=1;
-	else
-	dim1=0;
-	}
-	
-	n[0]=n1;n[1]=n2;n[2]=n3;
-	s[0]=1;s[1]=n1;s[2]=n1*n2;
+// 	if(r3>1)
+// 	dim1=2;
+// 	else
+// 	{
+// 	if(r2>1)
+// 	dim1=1;
+// 	else
+// 	dim1=0;
+// 	}
 	rect[0]=r1;rect[1]=r2;rect[2]=r3;
-	nd=n1*n2*n3;
+	n[0]=n1;n[1]=n2;n[2]=n3;
+	
+    dim1 = -1;
+    for (i=0; i < dim; i++) {
+	if (rect[i] > 1) dim1 = i+1;
+    }
+    
+    n1 = n2 = 1;
+    for (i=0; i < dim; i++) {
+        if (i < dim1) {
+            n1 *= n[i];
+        } else {
+            n2 *= n[i];
+        }
+    }
+    
+	nd=n[0]*n[1]*n[2];
 	
 	printf("dim=%d,dim1=%d\n",dim,dim1);
 	printf("nd=%d\n",nd);  
 
-    ps_divn_init(dim, nd, n, rect, niter, verb);
+    ps_divn_init(dim, n1, n, rect, niter, verb);
 	
-    one  = ps_floatalloc(nd);
-    two  = ps_floatalloc(nd);
-    rat1 = ps_floatalloc(nd);
-    rat2 = ps_floatalloc(nd);
+    one  = ps_floatalloc(n1);
+    two  = ps_floatalloc(n1);
+    rat1 = ps_floatalloc(n1);
+    rat2 = ps_floatalloc(n1);
+    data1=ps_floatalloc(nd);
+    data2=ps_floatalloc(nd);
+    data3=ps_floatalloc(nd);
 
     /*reading data*/
     for (i=0; i<nd; i++)
     {
-        one[i]=*((float*)PyArray_GETPTR1(arrf1,i));
+        data1[i]=*((float*)PyArray_GETPTR1(arrf1,i));
     }
 
     for (i=0; i<nd; i++)
     {
-        two[i]=*((float*)PyArray_GETPTR1(arrf2,i));
+        data2[i]=*((float*)PyArray_GETPTR1(arrf2,i));
     }
+
+    for (i2=0; i2 < n2; i2++) {
+    
+    mcp(one,data1,0,i2*n1,n1);
+	mcp(two,data2,0,i2*n1,n1);
 	
 	ps_divne(one,two,rat1,eps);
     ps_divne(two,one,rat2,eps);
 
 	/* combination */
 	ps_divn_combine (rat1,rat2,rat1);
-
+    
+    mcp(data3,rat1,i2*n1,0,n1);
+    }
 
     /*Below is the output part*/
     PyArrayObject *vecout;
@@ -1060,7 +1084,7 @@ static PyObject *Clocalsimi(PyObject *self, PyObject *args){
 	/* Make a new double vector of same dimension */
 	vecout=(PyArrayObject *) PyArray_SimpleNew(1,dims,NPY_FLOAT);
 	for(i=0;i<dims[0];i++)
-		(*((float*)PyArray_GETPTR1(vecout,i))) = rat1[i];
+		(*((float*)PyArray_GETPTR1(vecout,i))) = data3[i];
 
 	/*free memory*/
 	free(one);free(two);free(rat1);free(rat2);
@@ -1069,20 +1093,146 @@ static PyObject *Clocalsimi(PyObject *self, PyObject *args){
 	
 }
 
+static PyObject *Cfocus(PyObject *self, PyObject *args){
+    
+	/**initialize data input**/
+    int i2, i3, n1, n2, n3, n12, n123, nd2, ndata2;
+    float *data,*data2,*din;
+    int verb;
+    int r1,r2,r3,diff1,diff2,diff3,box1,box2,box3;
+    int repeat,adj;
+	ps_triangle tr;
+	float *dat,*num,*den,*rat1,*rat2;
+	int id, nd;
+	float mean;
+	int dim;
+	
+    PyObject *f1=NULL;
+    PyObject *arrf1=NULL;    
+	int niter; 
+    
+	PyArg_ParseTuple(args, "Oiiiiiiiii", &f1, &n1, &n2, &n3, &r1, &r2, &r3, &niter, &dim, &verb);
+        
+    printf("n1=%d,n2=%d,n3=%d,r1=%d,r2=%d,r3=%d\n",n1,n2,n3,r1,r2,r3);
+    printf("niter=%d,dim=%d,verb=%d\n",niter,dim,verb);
+    
+	n123=n1*n2*n3;
+	ndata2=n123;
+	
+    arrf1 = PyArray_FROM_OTF(f1, NPY_FLOAT, NPY_IN_ARRAY);
+    
+    nd2=PyArray_NDIM(arrf1);
+    npy_intp *sp=PyArray_SHAPE(arrf1);
+	
+    if (*sp != n123)
+    {
+    	printf("Dimension mismatch, N_input = %d, N_data = %d\n", *sp, n123);
+    	return NULL;
+    }
+
+    int i, j, n[PS_MAX_DIM], rect[PS_MAX_DIM], s[PS_MAX_DIM];
+	
+	n[0]=n1;n[1]=n2;n[2]=n3;
+	s[0]=1;s[1]=n1;s[2]=n1*n2;
+	rect[0]=r1;rect[1]=r2;rect[2]=r3;
+	nd=n1*n2*n3;
+
+    data = ps_floatalloc(n1*n2*n3);
+    data2 = ps_floatalloc(n1*n2*n3);
+
+    /*reading data*/
+    for (i=0; i<n1*n2*n3; i++)
+    {
+        data[i]=*((float*)PyArray_GETPTR1(arrf1,i));
+    }
+    
+	if(dim==2)
+	{
+	n12=n1*n2;
+	}else
+	{
+		if(dim==3)
+		{
+			n12=n1*n2*n3;
+			n3=1;
+		}
+	}
+
+    dat = ps_floatalloc(n12);
+    num = ps_floatalloc(n12);
+    den = ps_floatalloc(n12);
+    rat1 = ps_floatalloc(n12);
+    rat2 = ps_floatalloc(n12);
+
+	if(verb)
+	{
+	printf("dim=%d,n12=%d,n3=%d,r1=%d,r2=%d,r3=%d,niter=%d\n",dim,n12,n3,rect[0],rect[1],rect[2],niter);
+	printf("n=[%d,%d,%d]\n",n[0],n[1],n[2]);
+	}
+	
+    ps_divn_init(dim, n12, n, rect, niter,verb);
+	
+    for (i3=0; i3 < n3; i3++) {
+	mcp(dat,data,0,i3*n12,n12);
+	mean=0.;
+	for (i=0; i < n12; i++) {
+	    dat[i] *= dat[i];
+	    mean += dat[i]*dat[i];
+	}
+	mean = sqrtf(n12/mean);
+	
+	for (i=0; i < n12; i++) {
+	    num[i] = mean;
+	    den[i] = dat[i]*mean;
+	}
+	
+	ps_divn (num, den, rat1);
+	
+	for (i=0; i < n12; i++) {
+	    den[i] = 1.;
+	    num[i] = dat[i];
+	}
+	
+	ps_divn (num, den, rat2);
+	
+	ps_divn_combine (rat1, rat2, rat1);
+	
+	mcp(data2,rat1,i3*n12,0,n12);
+    }
+
+    /*Below is the output part*/
+    PyArrayObject *vecout;
+	npy_intp dims[2];
+	dims[0]=ndata2;dims[1]=1;
+	/* Parse tuples separately since args will differ between C fcns */
+	/* Make a new double vector of same dimension */
+	vecout=(PyArrayObject *) PyArray_SimpleNew(1,dims,NPY_FLOAT);
+	for(i=0;i<dims[0];i++)
+		(*((float*)PyArray_GETPTR1(vecout,i))) = data2[i];
+
+	/*free memory*/
+	free(dat);free(den);free(num);free(rat1);free(rat2);free(data);free(data2);
+	
+	return PyArray_Return(vecout);
+	
+}
+
+
 // documentation for each functions.
-static char dipcfun_document[] = "Document stuff for dip...";
+static char orthocfun_document[] = "Document stuff for dip...";
 
 // defining our functions like below:
 // function_name, function, METH_VARARGS flag, function documents
 static PyMethodDef functions[] = {
-  {"Clocalortho", Clocalortho, METH_VARARGS, dipcfun_document},
-  {"Clocalsimi", Clocalsimi, METH_VARARGS, dipcfun_document},
+  {"Clocalortho", Clocalortho, METH_VARARGS, orthocfun_document},
+  {"Clocalsimi", Clocalsimi, METH_VARARGS, orthocfun_document},
+  {"Cfocus", Cfocus, METH_VARARGS, orthocfun_document},
   {NULL, NULL, 0, NULL}
 };
 
 // initializing our module informations and settings in this structure
 // for more informations, check head part of this file. there are some important links out there.
-static struct PyModuleDef dipcfunModule = {
+static struct PyModuleDef orthocfunModule = {
   PyModuleDef_HEAD_INIT, // head informations for Python C API. It is needed to be first member in this struct !!
   "orthocfun",  // module name
   NULL, // means that the module does not support sub-interpreters, because it has global state.
@@ -1093,7 +1243,7 @@ static struct PyModuleDef dipcfunModule = {
 // runs while initializing and calls module creation function.
 PyMODINIT_FUNC PyInit_orthocfun(void){
   
-    PyObject *module = PyModule_Create(&dipcfunModule);
+    PyObject *module = PyModule_Create(&orthocfunModule);
     import_array();
     return module;
 }

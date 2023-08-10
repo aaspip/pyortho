@@ -53,7 +53,7 @@ def localsimi(d1,d2,rect,niter=50,eps=0.0,verb=1):
 	simi=np.sqrt(np.abs(ratio*ratio1));
 	return simi
 
-def localsimic(d1,d2,rect,niter=50,eps=0.0,verb=1):
+def localsimic(d1,d2,rect,niter=20,eps=0.0,verb=1):
 	'''
 	LOCASIMIC: calculate local similarity between two datasets
 	
