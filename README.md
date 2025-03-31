@@ -42,14 +42,12 @@ BibTeX:
 -----------
 ## Copyright
 	pyortho developing team, 2022-present
------------
 
+-----------
 ## License
-    GNU General Public License, Version 3
-    (http://www.gnu.org/copyleft/gpl.html)   
+    MIC License  
 
 -----------
-
 ## Install
 Using the latest version
 
